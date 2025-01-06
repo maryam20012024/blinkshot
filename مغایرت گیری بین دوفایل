@@ -1,0 +1,108 @@
+import pandas as pd
+import os
+
+
+def load_and_inspect(file_path, sheet_index=0):
+    """Load an Excel file and inspect its sheets and columns."""
+    if not os.path.exists(file_path):
+        print(f"File does not exist: {file_path}")
+        return None, None, None
+
+    try:
+        # Load the Excel file
+        excel_data = pd.ExcelFile(file_path)
+
+        # Get sheet names
+        sheet_names = excel_data.sheet_names
+        print(f"Sheet names in the file: {sheet_names}")
+
+        # Load the specific sheet (default is the first one)
+        df = excel_data.parse(sheet_names[sheet_index])
+
+        # Display original and cleaned columns
+        original_columns = df.columns.tolist()
+        cleaned_columns = [col.strip() for col in original_columns]
+        df.columns = cleaned_columns  # Apply cleaned column names
+
+        print(f"Original Columns: {original_columns}")
+        print(f"Cleaned Columns: {cleaned_columns}")
+
+        return df, sheet_names, cleaned_columns
+
+    except Exception as e:
+        print(f"Error loading the file: {e}")
+        return None, None, None
+
+
+def main():
+    # File paths
+    file1_path = input("Enter the path to the first Excel file: ").strip()
+    file2_path = input("Enter the path to the second Excel file: ").strip()
+
+    # Load and inspect the first file
+    print("\nInspecting File 1:")
+    df1, sheet_names1, columns1 = load_and_inspect(file1_path)
+    if df1 is None:
+        return
+
+    # Load and inspect the second file
+    print("\nInspecting File 2:")
+    df2, sheet_names2, columns2 = load_and_inspect(file2_path)
+    if df2 is None:
+        return
+
+    # Ask user for column names
+    key_col1 = input(f"Enter the column name for National ID from File 1 (options: {columns1}): ").strip()
+    value_col1 = input(f"Enter the column name for Amount from File 1 (options: {columns1}): ").strip()
+    key_col2 = input(f"Enter the column name for National ID from File 2 (options: {columns2}): ").strip()
+    value_col2 = input(f"Enter the column name for Amount from File 2 (options: {columns2}): ").strip()
+
+    # Validate columns
+    if key_col1 not in columns1 or value_col1 not in columns1:
+        print(f"Invalid column names for File 1: {key_col1}, {value_col1}")
+        return
+    if key_col2 not in columns2 or value_col2 not in columns2:
+        print(f"Invalid column names for File 2: {key_col2}, {value_col2}")
+        return
+
+    # Perform comparison
+    print("\nPerforming comparison...")
+    compare_files(file1_path, file2_path, key_col1, value_col1, key_col2, value_col2)
+
+
+def compare_files(file1_path, file2_path, key_col1, value_col1, key_col2, value_col2):
+    """Compare two files based on given columns and save the result."""
+    df1 = pd.read_excel(file1_path)
+    df2 = pd.read_excel(file2_path)
+
+    # Clean column names
+    df1.columns = df1.columns.str.strip()
+    df2.columns = df2.columns.str.strip()
+
+    # Aggregate amounts for each National ID
+    df1_agg = df1.groupby(key_col1, as_index=False)[value_col1].sum()
+    df2_agg = df2.groupby(key_col2, as_index=False)[value_col2].sum()
+
+    # Merge dataframes
+    merged = pd.merge(
+        df1_agg, df2_agg, left_on=key_col1, right_on=key_col2, how='outer', suffixes=('_file1', '_file2')
+    )
+
+    # Fill NaN values with 0 for comparison
+    merged[value_col1] = merged[value_col1].fillna(0)
+    merged[value_col2] = merged[value_col2].fillna(0)
+
+    # Compare values
+    merged['Status'] = merged.apply(
+        lambda row: "Match" if row[value_col1] == row[value_col2] else "Mismatch",
+        axis=1
+    )
+
+    # Save the result
+    output_file = 'comparison_result.xlsx'
+    merged.to_excel(output_file, index=False)
+    print(f"Comparison result saved to {output_file}")
+
+
+if __name__ == "__main__":
+    main()
